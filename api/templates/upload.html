@@ -26,6 +26,7 @@
                 <p class="card-subtitle mt-4">Arraste e solte ou clique para enviar seus arquivos</p>
                 <p class="card-subtitle mb-4">Somente arquivos PDF</p>
                 <input type="file" name="files" id="file-input" multiple accept="application/pdf" class="form-control d-none" required>
+                <p id="error-message" style="color: red; display: none;"></p>
             </div>
 
             <div class="mb-3 mt-3">
@@ -45,6 +46,7 @@
         const uploadArea = document.getElementById('upload-area');
         const fileInput = document.getElementById('file-input');
         const fileList = document.getElementById('file-list');
+        const errorMessage = document.getElementById('error-message');
         let filesArray = [];
 
         uploadArea.addEventListener('click', () => fileInput.click());
@@ -53,8 +55,23 @@
 
         function handleFiles() {
             const newFiles = Array.from(fileInput.files);
-            filesArray = filesArray.concat(newFiles);
+            let valid = true;
+            errorMessage.style.display = 'none';
 
+            newFiles.forEach(file => {
+                if (file.type !== 'application/pdf') {
+                    valid = false;
+                }
+            });
+
+            if (!valid) {
+                errorMessage.textContent = 'Por favor, envie apenas arquivos PDF.';
+                errorMessage.style.display = 'block';
+                fileInput.value = '';
+                return;
+            }
+
+            filesArray = filesArray.concat(newFiles);
             displayFiles();
         }
 
