@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CV-SCANNER</title>
+    <link rel="icon" href="../static/img/pdf_icon.png" type="image/x-icon">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='upload.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='globals.css') }}">
+</head>
+<body>
+
+    <nav class="navbar">
+        <a class="navbar-brand" href="#">
+            <img src="../static/img/pdf_icon.png">CV-SCANNER
+        </a>
+    </nav>
+
+    <div class="container mt-5 mb-3">
+        <h1 class="text-center mb-4">Análise de candidato online</h1>
+        <p class="text-center mb-2">Uma ferramenta que permite aos profissionais de recrutamento analisar currículos de maneira ágil e simplificada.</p>
+        <form method="POST" enctype="multipart/form-data" class="bg-white p-4 rounded shadow ht-container" id="upload-form">
+            <div class="upload-area" id="upload-area">
+                <img class="mt-4" src="../static/img/file_icon.png" alt="file">
+                <p class="card-subtitle mt-4">Arraste e solte ou clique para enviar seus arquivos</p>
+                <p class="card-subtitle mb-4">Somente arquivos PDF</p>
+                <input type="file" name="files" id="file-input" multiple accept="application/pdf" class="form-control d-none" required>
+            </div>
+
+            <div class="mb-3 mt-3">
+                <label for="keywords" class="form-label">Palavras-chave (separadas por vírgula):</label>
+                <input type="text" name="keywords" class="form-control" required>
+            </div>
+            
+            <ul class="file-list mt-3" id="file-list"></ul>
+            
+            <div class="text-center">
+                <button type="submit" class="btn btn-send btn-primary">Validar agora</button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('upload-area');
+        const fileInput = document.getElementById('file-input');
+        const fileList = document.getElementById('file-list');
+        let filesArray = [];
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        fileInput.addEventListener('change', handleFiles);
+
+        function handleFiles() {
+            const newFiles = Array.from(fileInput.files);
+            filesArray = filesArray.concat(newFiles);
+
+            displayFiles();
+        }
+
+        function displayFiles() {
+            fileList.innerHTML = '';
+
+            filesArray.forEach((file, index) => {
+                const fileItem = document.createElement('li');
+                fileItem.classList.add('file-item');
+
+                const fileIcon = document.createElement('span');
+                fileIcon.classList.add('file-icon');
+                fileIcon.innerHTML = file.type.includes('pdf') ? '📄' : '📑';
+
+                const fileName = document.createElement('p');
+                fileName.classList.add('file-name');
+                fileName.textContent = file.name;
+
+                const removeButton = document.createElement('button');
+                removeButton.classList.add('remove-btn');
+                removeButton.classList.add('w-100');
+                removeButton.textContent = 'Remover';
+                removeButton.addEventListener('click', () => removeFile(index));
+
+                fileItem.appendChild(fileIcon);
+                fileItem.appendChild(fileName);
+                fileItem.appendChild(removeButton);
+
+                fileList.appendChild(fileItem);
+            });
+        }
+
+        function removeFile(index) {
+            filesArray.splice(index, 1);
+            displayFiles();
+        }
+    </script>
+</body>
+</html>

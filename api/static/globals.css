@@ -1,0 +1,34 @@
+.navbar {
+    background-color: #343a40;
+    padding: 1rem;
+}
+.navbar-brand {
+    display: flex;
+    align-items: center;
+    color: white;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    padding: 0rem 18rem;
+}
+.navbar-brand:hover {
+    color: #f8f9fa;
+}
+.btn-primary {
+    background-color: #007bff;
+    border: none;
+}
+.btn-primary:hover {
+    background-color: #0056b3;
+}
+.btn-send {
+    border: none;
+    color: white;
+    padding: 10px 20px;
+    margin-top: 20px;
+    border-radius: 5px;
+    cursor: pointer;
+}
+.ht-container {
+    min-height: 45vh;
+}
