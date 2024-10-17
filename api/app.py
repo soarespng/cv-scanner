@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 from werkzeug.utils import secure_filename
 from pdfminer.high_level import extract_text
-from flask import Flask, render_template, request, redirect
+from flask import Flask, render_template, request, redirect, render_template_string
 
 load_dotenv()
 
@@ -68,6 +68,20 @@ def check_keywords_in_text(text, keywords):
     compatibility = (len(found_keywords) / len(keywords_lower)) * 100 if keywords_lower else 0
     return found_keywords, not_found_keywords, compatibility
 
+# def delete_files_in_supabase():
+#     response = supabase.storage.from_('uploads').list()
+    
+#     if response.status_code == 200:
+#         for file_info in response.data:
+#             file_name = file_info['name']
+#             try:
+#                 supabase.storage.from_('uploads').remove([file_name])
+#                 logging.info(f"Arquivo {file_name} deletado do bucket.")
+#             except Exception as e:
+#                 logging.error(f"Erro ao deletar o arquivo {file_name}: {str(e)}")
+#     else:
+#         logging.error("Erro ao listar arquivos no bucket.")
+
 def upload_file_to_supabase(file):
     filename = secure_filename(file.filename)
     
@@ -91,6 +105,7 @@ def upload_file_to_supabase(file):
 @app.route('/', methods=['GET', 'POST'])
 def upload_file():
     if request.method == 'POST':
+        # delete_files_in_supabase()
         files = request.files.getlist('files')
         keywords = request.form['keywords'].split(',')
         profiles = []
@@ -119,9 +134,18 @@ def upload_file():
 
     return render_template('upload.html')
 
-@app.route('/view/<filename>')
+@app.route('/view/<path:filename>')
 def view_resume(filename):
-    return redirect(filename)
+    return render_template_string('''
+        <html>
+            <head>
+                <meta http-equiv="refresh" content="0; url={{ url }}">
+            </head>
+            <body>
+                <p>Redirecionando para o currículo...</p>
+            </body>
+        </html>
+    ''', url=filename)
 
 if __name__ == '__main__':
     app.run(debug=True)
