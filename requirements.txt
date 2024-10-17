@@ -1,4 +1,6 @@
-Flask==2.2.3
+Flask==2.0.2
 pdfminer.six==20201018
-gunicorn==20.1.0
-Werkzeug==2.2.3
+supabase==2.9.0
+python-dotenv==0.19.2
+werkzeug==2.0.2
+python-dotenv==0.19.2

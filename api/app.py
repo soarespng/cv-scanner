@@ -1,21 +1,29 @@
-from flask import Flask, render_template, request, send_file, abort
-from pdfminer.high_level import extract_text
 import os
 import re
+import io
+import logging
+import mimetypes
+from dotenv import load_dotenv
+from supabase import create_client, Client
 from werkzeug.utils import secure_filename
+from pdfminer.high_level import extract_text
+from flask import Flask, render_template, request, redirect
+
+load_dotenv()
+
+logging.basicConfig(level=logging.INFO)
+
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY')
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 app = Flask(__name__)
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-
-def extract_text_from_pdf(pdf_path):
-    text = extract_text(pdf_path)
-    return text
+def extract_text_from_pdf(file):
+    file.seek(0)
+    return extract_text(io.BytesIO(file.read()))
 
 def clean_text(text):
-    """Limpa o texto extraído."""
     return re.sub(r'\s+', ' ', text).strip()
 
 def extract_profile_info(text):
@@ -26,96 +34,94 @@ def extract_profile_info(text):
         'telefone': 'N/A',
         'email': 'N/A',
     }
+    
+    patterns = {
+        'nome': r'(?i)nome:\s*([A-Za-zÀ-ÿ\s\.\-]+)',
+        'telefone': r'(?i)(telefone|celular|contato):\s*[\(\d{2}\)]*\s*\d{4,5}[-\s]?\d{4}',
+        'email': r'(?i)e[-]?mail:\s*([\w\.-]+@[\w\.-]+)|([\w\.-]+@[\w\.-]+)'
+    }
 
-    nome_match = re.search(r'(?i)nome:\s*([A-Za-zÀ-ÿ\s\.\-]+)', text)
+    nome_match = re.search(patterns['nome'], text)
     if nome_match:
         nome_completo = clean_text(nome_match.group(1)).strip()
         partes_nome = nome_completo.split()
-
-        if len(partes_nome) > 0:
+        if partes_nome:
             profile_info['primeiro_nome'] = partes_nome[0]
-        
-        if len(partes_nome) > 2:
-            profile_info['segundo_nome'] = partes_nome[1]
-            profile_info['ultimo_nome'] = " ".join(partes_nome[2:])
-        elif len(partes_nome) == 2:
-            profile_info['ultimo_nome'] = partes_nome[1]
+            if len(partes_nome) > 2:
+                profile_info['segundo_nome'] = partes_nome[1]
+                profile_info['ultimo_nome'] = " ".join(partes_nome[2:])
+            elif len(partes_nome) == 2:
+                profile_info['ultimo_nome'] = partes_nome[1]
 
-    telefone_match = re.search(r'(?i)(telefone|celular|contato):\s*[\(\d{2}\)]*\s*\d{4,5}[-\s]?\d{4}', text)
-    if telefone_match:
-        profile_info['telefone'] = clean_text(telefone_match.group(0)).replace("Telefone: ", "").strip()
-
-    email_match = re.search(r'(?i)e[-]?mail:\s*([\w\.-]+@[\w\.-]+)', text)
-    if email_match:
-        profile_info['email'] = clean_text(email_match.group(1))
-    else:
-        email_flexible = re.search(r'([\w\.-]+@[\w\.-]+)', text)
-        if email_flexible:
-            profile_info['email'] = clean_text(email_flexible.group(1))
+    for key, pattern in patterns.items():
+        match = re.search(pattern, text)
+        if match:
+            profile_info[key] = clean_text(match.group(0)).replace(key + ": ", "").strip()
 
     return profile_info
 
 def check_keywords_in_text(text, keywords):
-    text = text.lower()
-    keywords = [keyword.lower().strip() for keyword in keywords]
-    keyword_matches = {keyword: keyword in text for keyword in keywords}
-    
-    total_keywords = len(keywords)
-    found_keywords = [keyword for keyword, found in keyword_matches.items() if found]
-    not_found_keywords = [keyword for keyword, found in keyword_matches.items() if not found]
-    compatibility = (len(found_keywords) / total_keywords) * 100 if total_keywords > 0 else 0
-    
+    text_lower = text.lower()
+    keywords_lower = [keyword.lower().strip() for keyword in keywords]
+    found_keywords = [keyword for keyword in keywords_lower if keyword in text_lower]
+    not_found_keywords = [keyword for keyword in keywords_lower if keyword not in text_lower]
+    compatibility = (len(found_keywords) / len(keywords_lower)) * 100 if keywords_lower else 0
     return found_keywords, not_found_keywords, compatibility
+
+def upload_file_to_supabase(file):
+    filename = secure_filename(file.filename)
+    
+    if not filename.endswith('.pdf'):
+        raise ValueError("O arquivo deve ter a extensão .pdf")
+
+    mime_type, _ = mimetypes.guess_type(filename)
+    if mime_type != 'application/pdf':
+        raise ValueError(f"Tipo MIME não suportado: {mime_type}")
+
+    file.seek(0)
+    response = supabase.storage.from_('uploads').upload(f"uploads/{filename}", file.read(), {
+        'Content-Type': 'application/pdf'
+    })
+
+    if response.status_code == 200:
+        return supabase.storage.from_('uploads').get_public_url(f"uploads/{filename}")
+    else:
+        raise Exception("Erro ao fazer upload do arquivo.")
 
 @app.route('/', methods=['GET', 'POST'])
 def upload_file():
     if request.method == 'POST':
-        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-
         files = request.files.getlist('files')
         keywords = request.form['keywords'].split(',')
         profiles = []
 
         for file in files:
-            filename = secure_filename(file.filename)
-            pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            
             try:
-                file.save(pdf_path)
+                pdf_url = upload_file_to_supabase(file)
+                text = extract_text_from_pdf(file)
+                profile_info = extract_profile_info(text)
+                found_keywords, not_found_keywords, compatibility = check_keywords_in_text(text, keywords)
+
+                profile_info.update({
+                    'found_keywords': found_keywords,
+                    'not_found_keywords': not_found_keywords,
+                    'compatibilidade': f"{compatibility:.2f}%",
+                    'filename': pdf_url
+                })
+
+                profiles.append(profile_info)
+
             except Exception as e:
+                logging.error(f"Erro ao salvar o arquivo: {str(e)}")
                 return f"Erro ao salvar o arquivo: {str(e)}", 500
-
-            try:
-                text = extract_text_from_pdf(pdf_path)
-            except FileNotFoundError:
-                return f"Erro: O arquivo {filename} não foi encontrado após o upload.", 404
-            except Exception as e:
-                return f"Erro ao processar o arquivo {filename}: {str(e)}", 500
-
-            profile_info = extract_profile_info(text)
-            found_keywords, not_found_keywords, compatibility = check_keywords_in_text(text, keywords)
-
-            profile_info['found_keywords'] = found_keywords
-            profile_info['not_found_keywords'] = not_found_keywords
-            profile_info['compatibilidade'] = f"{compatibility:.2f}%"
-            profile_info['filename'] = filename
-
-            profiles.append(profile_info)
-
+        
         return render_template('result.html', profiles=profiles)
 
     return render_template('upload.html')
 
 @app.route('/view/<filename>')
 def view_resume(filename):
-    filename = secure_filename(filename)
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    
-    if os.path.exists(file_path):
-        return send_file(file_path)
-    else:
-        abort(404, description=f"Erro: O arquivo {filename} não foi encontrado.")
+    return redirect(filename)
 
 if __name__ == '__main__':
-    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     app.run(debug=True)
