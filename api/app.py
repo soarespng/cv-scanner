@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 from werkzeug.utils import secure_filename
 from pdfminer.high_level import extract_text
-from flask import Flask, render_template, request, redirect, render_template_string
+from flask import Flask, render_template, request, render_template_string
 
 load_dotenv()
 
@@ -68,19 +68,22 @@ def check_keywords_in_text(text, keywords):
     compatibility = (len(found_keywords) / len(keywords_lower)) * 100 if keywords_lower else 0
     return found_keywords, not_found_keywords, compatibility
 
-# def delete_files_in_supabase():
-#     response = supabase.storage.from_('uploads').list()
+def delete_files():
+    response = supabase.storage.from_('uploads').list()
     
-#     if response.status_code == 200:
-#         for file_info in response.data:
-#             file_name = file_info['name']
-#             try:
-#                 supabase.storage.from_('uploads').remove([file_name])
-#                 logging.info(f"Arquivo {file_name} deletado do bucket.")
-#             except Exception as e:
-#                 logging.error(f"Erro ao deletar o arquivo {file_name}: {str(e)}")
-#     else:
-#         logging.error("Erro ao listar arquivos no bucket.")
+    if isinstance(response, list):
+        if not response:
+            logging.info("Nenhum arquivo para deletar no bucket.")
+            return
+        for file_info in response:
+            file_name = file_info['name']
+            try:
+                supabase.storage.from_('uploads').remove([file_name])
+                logging.info(f"Arquivo {file_name} deletado do bucket.")
+            except Exception as e:
+                logging.error(f"Erro ao deletar o arquivo {file_name}: {str(e)}")
+    else:
+        logging.error("Erro ao listar arquivos no bucket. Resposta inesperada.")
 
 def upload_file_to_supabase(file):
     filename = secure_filename(file.filename)
@@ -94,7 +97,8 @@ def upload_file_to_supabase(file):
 
     file.seek(0)
     response = supabase.storage.from_('uploads').upload(f"uploads/{filename}", file.read(), {
-        'Content-Type': 'application/pdf'
+        'Content-Type': 'application/pdf',
+        'upsert': 'true'
     })
 
     if response.status_code == 200:
@@ -105,7 +109,7 @@ def upload_file_to_supabase(file):
 @app.route('/', methods=['GET', 'POST'])
 def upload_file():
     if request.method == 'POST':
-        # delete_files_in_supabase()
+        delete_files()
         files = request.files.getlist('files')
         keywords = request.form['keywords'].split(',')
         profiles = []
